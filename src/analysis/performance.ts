@@ -64,7 +64,7 @@ export class PerformanceMonitor {
       tokensUsed: acc.tokensUsed + curr.metrics.tokensUsed,
       cost: acc.cost + curr.metrics.cost,
       accuracy: acc.accuracy + curr.metrics.accuracy,
-      securityScore: acc.securityScore + curr.metrics.security.securityScore
+      securityScore: acc.securityScore + curr.metrics.securityScore
     }), { responseTime: 0, tokensUsed: 0, cost: 0, accuracy: 0, securityScore: 0 });
 
     return {

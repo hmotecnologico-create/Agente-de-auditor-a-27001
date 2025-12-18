@@ -49,6 +49,25 @@ export interface ModuleReport {
   recommendations: string[];
 }
 
+export interface ReportSection {
+  title: string;
+  content: string | any[];
+  type: 'text' | 'table' | 'chart' | 'list' | 'metrics';
+  level?: number;
+  priority?: 'high' | 'medium' | 'low';
+}
+
+export interface ReportData {
+  title: string;
+  sections: ReportSection[];
+  metadata: {
+    totalDocuments: number;
+    complianceScore: number;
+    riskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
+    processingTime: number;
+  };
+}
+
 export class ProfessionalReportExporter {
   private static instance: ProfessionalReportExporter;
 
@@ -128,7 +147,7 @@ export class ProfessionalReportExporter {
     });
 
     // Pie de página en todas las páginas
-    this.addProfessionalFooter(pdf, reportData, pageWidth, pageHeight);
+    this.addProfessionalFooter(pdf, reportData, pageWidth, pageHeight, margin);
 
     // Descargar
     const finalFilename = filename || `reporte_profesional_${reportData.company.replace(/\s+/g, '_')}_${Date.now()}`;
@@ -556,7 +575,8 @@ export class ProfessionalReportExporter {
     pdf: jsPDF,
     reportData: ProfessionalReportData,
     pageWidth: number,
-    pageHeight: number
+    pageHeight: number,
+    margin: number
   ): void {
     const pageCount = pdf.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
@@ -732,89 +752,6 @@ export class ProfessionalReportExporter {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
-
-  private async exportProfessionalToPDF(
-    reportData: ProfessionalReportData,
-    filename?: string
-  ): Promise<void> {
-    try {
-      console.log('📄 Generando PDF...');
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 20;
-      let yPosition = margin;
-
-      // Configuración de fuente
-      pdf.setFont('helvetica', 'normal');
-
-      // Título principal
-      pdf.setFontSize(20);
-      pdf.setFont('helvetica', 'bold');
-      const titleLines = pdf.splitTextToSize(reportData.title, pageWidth - 2 * margin);
-      pdf.text(titleLines, margin, yPosition);
-      yPosition += titleLines.length * 7 + 5;
-
-      // Subtítulo
-      if (reportData.subtitle) {
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'normal');
-        const subtitleLines = pdf.splitTextToSize(reportData.subtitle, pageWidth - 2 * margin);
-        pdf.text(subtitleLines, margin, yPosition);
-        yPosition += subtitleLines.length * 5 + 10;
-      }
-
-      // Metadatos
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'italic');
-      pdf.text(`Fecha: ${reportData.date}`, margin, yPosition);
-      if (reportData.author) {
-        pdf.text(`Autor: ${reportData.author}`, pageWidth - margin, yPosition, { align: 'right' });
-      }
-      yPosition += 10;
-
-      // Información del reporte
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Documentos Analizados: ${reportData.metadata.totalDocuments}`, margin, yPosition);
-      pdf.text(`Puntuación de Cumplimiento: ${reportData.metadata.complianceScore.toFixed(1)}%`, margin, yPosition + 5);
-      pdf.text(`Nivel de Riesgo: ${reportData.metadata.riskLevel}`, margin, yPosition + 10);
-      pdf.text(`Tiempo de Procesamiento: ${reportData.metadata.processingTime}ms`, margin, yPosition + 15);
-      yPosition += 25;
-
-      // Procesar secciones
-      for (const section of reportData.sections) {
-        yPosition = this.addSectionToPDF(pdf, section, yPosition, pageWidth, pageHeight, margin);
-
-        // Nueva página si es necesario
-        if (yPosition > pageHeight - 30) {
-          pdf.addPage();
-          yPosition = margin;
-        }
-      }
-
-      // Pie de página
-      const pageCount = pdf.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'italic');
-        pdf.text(`Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-        pdf.text('Generado por Agente de Auditoría ISO 27001', margin, pageHeight - 10);
-        pdf.text(new Date().toLocaleString(), pageWidth - margin, pageHeight - 10, { align: 'right' });
-      }
-
-      // Descargar
-      const finalFilename = filename || `reporte_auditoria_${Date.now()}.pdf`;
-      pdf.save(finalFilename);
-
-      console.log(`✅ PDF generado: ${finalFilename}`);
-
-    } catch (error) {
-      console.error('❌ Error generando PDF:', error);
-      throw new Error(`Error en exportación PDF: ${error}`);
-    }
   }
 
   private addSectionToPDF(

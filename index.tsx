@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
 import { SchemaType, Type } from "@google/genai";
+import html2canvas from 'html2canvas';
 
 // Define Document interface
 interface Document {
@@ -10,6 +11,7 @@ interface Document {
   type: string;
   content: string;
   processed?: boolean;
+  standards?: string[]; // Associated standards (e.g., ['ISO 27001', 'GDPR'])
 }
 import {
   Shield,
@@ -879,6 +881,7 @@ const App = () => {
   // Report generation states
   const [companyName, setCompanyName] = useState('');
   const [selectedStandard, setSelectedStandard] = useState<'ISO 27001' | 'GDPR' | 'Internal Policy' | 'all'>('all');
+  const [selectedStandardForUpload, setSelectedStandardForUpload] = useState<'ISO 27001' | 'GDPR' | 'Internal Policy'>('ISO 27001');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<any[]>([]);
 
@@ -899,7 +902,8 @@ const App = () => {
     };
   }, [results]);
 
-  // Initialize basic modules on app start
+  // Dashboard ref for PDF capture
+  const dashboardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const initializeBasicModules = async () => {
       try {
@@ -1308,7 +1312,13 @@ const App = () => {
         documentManager?.addDocument(doc);
       });
 
-      setProcessedDocuments(result.documents);
+      // Assign selected standard to processed documents
+      const documentsWithStandards = result.documents.map(doc => ({
+        ...doc,
+        standards: [selectedStandardForUpload]
+      }));
+
+      setProcessedDocuments(documentsWithStandards);
 
       // Show results
       let successMsg = `✅ Procesamiento completado:\n` +
@@ -1480,8 +1490,13 @@ const App = () => {
     setProcessingStage(`Generando reporte profesional completo de ${standard}...`);
 
     try {
+      // Filtrar documentos por norma seleccionada
+      const filteredDocuments = processedDocuments.filter(doc =>
+        doc.standards?.includes(standard) || standard === 'Complete'
+      );
+
       // Recopilar datos de todos los módulos
-      const moduleReports = await collectAllModuleData(standard);
+      const moduleReports = await collectAllModuleData(standard, filteredDocuments);
 
       // Calcular métricas generales
       const overallScore = calculateOverallScore(moduleReports);
@@ -1493,9 +1508,25 @@ const App = () => {
       // Crear secciones detalladas
       const sections = generateDetailedSections(moduleReports, standard);
 
+      // Capturar dashboard como imagen
+      let dashboardImage: string | undefined;
+      if (dashboardRef.current) {
+        try {
+          const canvas = await html2canvas(dashboardRef.current, {
+            scale: 2, // Mejor calidad
+            useCORS: true,
+            allowTaint: false
+          });
+          dashboardImage = canvas.toDataURL('image/png');
+          console.log('✅ Dashboard capturado para el reporte');
+        } catch (error) {
+          console.warn('⚠️ Error capturando dashboard:', error);
+        }
+      }
+
       // Metadata del reporte
       const metadata = {
-        totalDocuments: processedDocuments.length || documents.length,
+        totalDocuments: filteredDocuments.length || documents.length,
         processingTime: Date.now(), // Placeholder - debería calcularse realmente
         auditDate: new Date().toLocaleDateString('es-ES'),
         reportVersion: '1.0.0',
@@ -1513,7 +1544,8 @@ const App = () => {
         executiveSummary,
         sections,
         metadata,
-        modules: moduleReports
+        modules: moduleReports,
+        dashboardImage
       };
 
       // Agregar a reportes generados
@@ -1539,7 +1571,7 @@ const App = () => {
     setProcessingStage('');
   };
 
-  const collectAllModuleData = async (standard: string) => {
+  const collectAllModuleData = async (standard: string, filteredDocuments: Document[]) => {
     const modules: any[] = [];
 
     // Módulo de Auditoría
@@ -1618,18 +1650,18 @@ const App = () => {
     });
 
     // Módulo OCR
-    const ocrStatus = processedDocuments.length > 0 ? 'success' : 'not_run';
+    const ocrStatus = filteredDocuments.length > 0 ? 'success' : 'not_run';
     modules.push({
       name: 'Procesamiento OCR y Documentos',
       status: ocrStatus,
-      score: processedDocuments.length > 0 ? 95 : undefined, // Estimación
-      findings: processedDocuments.length > 0 ?
-        [`${processedDocuments.length} documentos procesados exitosamente`] :
-        ['No se han procesado documentos aún'],
+      score: filteredDocuments.length > 0 ? 95 : undefined, // Estimación
+      findings: filteredDocuments.length > 0 ?
+        [`${filteredDocuments.length} documentos procesados exitosamente para ${standard}`] :
+        [`No se han procesado documentos para ${standard} aún`],
       metrics: {
-        'Documentos Procesados': processedDocuments.length,
+        'Documentos Procesados': filteredDocuments.length,
         'Documentos Originales': documents.length,
-        'Tasa de Éxito': processedDocuments.length > 0 ? '95%' : '0%',
+        'Tasa de Éxito': filteredDocuments.length > 0 ? '95%' : '0%',
         'OCR Habilitado': isOCREnabled ? 'Sí' : 'No',
         'Archivos Subidos': uploadedFiles.length
       },
@@ -2459,7 +2491,94 @@ NOTA: Esta es una simulación. En una implementación real, se integraría con s
         {activeTab === 'corpus' && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <p>Corpus tab content</p>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <Upload className="w-5 h-5 text-blue-500" />
+                Ingesta de Documentos por Norma
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Seleccionar Norma para los Documentos
+                  </label>
+                  <select
+                    value={selectedStandardForUpload}
+                    onChange={(e) => setSelectedStandardForUpload(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="ISO 27001">ISO 27001 - Sistema de Gestión de Seguridad de la Información</option>
+                    <option value="GDPR">GDPR - Reglamento General de Protección de Datos</option>
+                    <option value="Internal Policy">Política Interna</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Los documentos subidos se asociarán a la norma seleccionada
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Subir Documentos
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                    onChange={handleFileUpload}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Formatos soportados: PDF, DOC, DOCX, TXT, JPG, PNG
+                  </p>
+                </div>
+
+                {uploadedFiles.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">
+                      Archivos Cargados ({uploadedFiles.length})
+                    </h4>
+                    <div className="space-y-1">
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="text-sm text-blue-700 flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={processUploadedDocuments}
+                      disabled={isProcessing}
+                      className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isProcessing ? 'Procesando...' : 'Procesar Documentos'}
+                    </button>
+                  </div>
+                )}
+
+                {processedDocuments.length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-green-900 mb-2">
+                      Documentos Procesados ({processedDocuments.length})
+                    </h4>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {processedDocuments.map((doc, index) => (
+                        <div key={index} className="text-sm text-green-700 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" />
+                          {doc.name} - Norma: {doc.standards?.join(', ') || 'No asignada'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {processingStage && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-yellow-600" />
+                      <span className="text-sm text-yellow-800">{processingStage}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2652,7 +2771,9 @@ NOTA: Esta es una simulación. En una implementación real, se integraría con s
             )}
 
             {/* Enhanced Compliance Dashboard */}
-            <ComplianceDashboard stats={complianceStats} results={results} standard={selectedStandard} />
+            <div ref={dashboardRef}>
+              <ComplianceDashboard stats={complianceStats} results={results} standard={selectedStandard} />
+            </div>
 
             {/* Detailed Recommendations */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">

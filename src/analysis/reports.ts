@@ -12,6 +12,7 @@ export interface ProfessionalReportData {
   sections: ProfessionalReportSection[];
   metadata: ReportMetadata;
   modules: ModuleReport[];
+  dashboardImage?: string;
 }
 
 export interface ExecutiveSummary {
@@ -130,6 +131,13 @@ export class ProfessionalReportExporter {
     yPosition = margin;
     yPosition = this.addExecutiveSummary(pdf, reportData.executiveSummary, pageWidth, pageHeight, margin, yPosition);
 
+    // Dashboard visual
+    if (reportData.dashboardImage) {
+      pdf.addPage();
+      yPosition = margin;
+      yPosition = this.addDashboardImage(pdf, reportData.dashboardImage, pageWidth, pageHeight, margin, yPosition);
+    }
+
     // Reportes por módulo
     reportData.modules.forEach(module => {
       pdf.addPage();
@@ -224,6 +232,47 @@ export class ProfessionalReportExporter {
     pdf.setTextColor(127, 140, 141); // Gray
     pdf.text(`Versión: ${reportData.metadata.reportVersion}`, margin, pageHeight - 30);
     pdf.text(`Generado por: ${reportData.metadata.generatedBy}`, margin, pageHeight - 20);
+
+    return yPosition;
+  }
+
+  private addDashboardImage(
+    pdf: jsPDF,
+    dashboardImage: string,
+    pageWidth: number,
+    pageHeight: number,
+    margin: number,
+    yPosition: number
+  ): number {
+    // Título de la sección del dashboard
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(44, 62, 80);
+    pdf.text('DASHBOARD DE CUMPLIMIENTO', margin, yPosition);
+    yPosition += 20;
+
+    // Descripción
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(52, 73, 94);
+    const description = 'Vista gráfica del estado actual de cumplimiento y métricas clave del sistema de gestión de seguridad de la información.';
+    const descLines = pdf.splitTextToSize(description, pageWidth - 2 * margin);
+    pdf.text(descLines, margin, yPosition);
+    yPosition += descLines.length * 6 + 10;
+
+    // Agregar la imagen del dashboard
+    const imgWidth = pageWidth - 2 * margin;
+    const imgHeight = (pageHeight - yPosition - margin) * 0.8; // Usar 80% del espacio disponible
+
+    try {
+      pdf.addImage(dashboardImage, 'PNG', margin, yPosition, imgWidth, imgHeight);
+      yPosition += imgHeight + 10;
+    } catch (error) {
+      console.warn('Error agregando imagen del dashboard al PDF:', error);
+      pdf.setTextColor(231, 76, 60); // Red
+      pdf.text('Error al cargar la imagen del dashboard', margin, yPosition);
+      yPosition += 20;
+    }
 
     return yPosition;
   }
